@@ -1,0 +1,17 @@
+{
+  "name": "Weighing Station",
+  "short_name": "Weighing",
+  "description": "Live weighing for Bluetooth and RS-232 scales: big display, tare, target check, formula weighing and logs.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8f4f2",
+  "theme_color": "#4d1018",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

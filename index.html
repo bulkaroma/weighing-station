@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4d1018">
+<meta name="description" content="Live weighing for Bluetooth and RS-232 scales: big display, tare, target check, formula weighing and logs.">
+<title>Weighing Station</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{
+  --m-900:#330910;--m-800:#4d1018;--m-700:#64161f;--m:#7b1e2b;--m-200:#e6c3c9;--m-100:#f4e4e6;--m-50:#fbf4f5;
+  --bg:#f8f4f2;--card:#fff;--ink:#2a1a1c;--muted:#7d6b6e;--line:#efe3e1;--line2:#dfcfcc;
+  --gold:#e8c27e;--cream:#fff5e8;
+  --ok:#2e7d4f;--ok-bg:#e5f3ea;--warn:#a86300;--warn-bg:#fcefd8;--bad:#c62828;--bad-bg:#fbe6e6;
+  --radius:16px;--shadow:0 1px 2px rgba(58,11,18,.05),0 6px 20px rgba(58,11,18,.05);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+svg{flex:none}
+.num{font-variant-numeric:tabular-nums}
+.hidden{display:none!important}
+body:not(.is-on) .when-on,body.is-on .when-off,body:not(.has-port) .when-port,body:not(.is-demo) .when-demo{display:none!important}
+
+/* ---------- top bar ---------- */
+.topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;padding:10px 20px;padding-top:calc(10px + env(safe-area-inset-top));background:var(--m-800);color:#fff}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:.2px;margin-right:auto;min-width:0}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--m);display:grid;place-items:center;flex:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.brand-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-right{display:flex;align-items:center;gap:8px;min-width:0}
+.status{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:999px;background:rgba(255,255,255,.1);font-size:13px;white-space:nowrap;min-width:0}
+.status .dot{width:8px;height:8px;border-radius:50%;background:#bfa5a9;flex:none}
+.status.ok .dot{background:#5fd38d;box-shadow:0 0 0 3px rgba(95,211,141,.25)}
+.status.warn .dot{background:#f2b84b}
+.status.bad .dot{background:#ff6b6b}
+.status .mini{font-weight:700;color:var(--gold)}
+.status .mini:empty{display:none}
+
+/* ---------- tabs (top on desktop, bottom bar on phone) ---------- */
+.tabs{display:flex;gap:4px;max-width:1040px;margin:16px auto 0;padding:5px;background:#fff;border:1px solid var(--line);border-radius:14px;width:calc(100% - 40px);box-shadow:var(--shadow)}
+.tab{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;border:0;background:none;padding:10px 12px;border-radius:10px;font-weight:600;color:var(--muted);transition:background .15s,color .15s}
+.tab svg{width:18px;height:18px}
+.tab:hover{color:var(--m)}
+.tab[aria-selected="true"]{background:var(--m);color:#fff}
+
+/* ---------- layout ---------- */
+main{max-width:1080px;margin:0 auto;padding:16px 20px 48px}
+.panel{display:none}
+.panel.on{display:grid;gap:16px}
+main>*,.panel>*{min-width:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.grid2>*{min-width:0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);min-width:0}
+.card h2{font-size:16px;margin:0 0 14px;font-weight:700;color:var(--m-900)}
+.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin:20px 0 10px;font-weight:700}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.card-head h2{margin:0}
+.count{font-weight:500;color:var(--muted)}
+.muted{color:var(--muted)}
+.hint{font-size:13px;color:var(--muted);margin:4px 0 0}
+.banner{border-radius:12px;padding:12px 16px;background:var(--m-50);border:1px solid var(--m-200);color:var(--m-900)}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--line2);background:#fff;color:var(--ink);padding:9px 16px;border-radius:10px;font-weight:600;line-height:1.2;white-space:nowrap;transition:background .15s,border-color .15s,transform .05s}
+.btn:hover{border-color:var(--m-200);background:var(--m-50)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--m);border-color:var(--m);color:#fff}
+.btn-primary:hover{background:var(--m-700);border-color:var(--m-700)}
+.btn-ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn-ok:hover{background:#256b42;border-color:#256b42}
+.btn-lg{padding:13px 22px;font-size:16px;border-radius:12px}
+.btn-sm{padding:6px 11px;font-size:13px;border-radius:8px}
+.btn-danger{color:var(--bad)}
+.btn-ghost{border-color:transparent;background:transparent}
+.btn-top{background:var(--cream);color:var(--m-900);border-color:var(--cream)}
+.btn-top:hover{background:#fff;border-color:#fff}
+.btn-top-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.3)}
+.btn-top-ghost:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.5)}
+.btn-glass{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#fff}
+.btn-glass:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.35)}
+.btn-cream{background:var(--cream);border-color:var(--cream);color:var(--m-900)}
+.btn-cream:hover{background:#fff;border-color:#fff}
+.link{border:0;background:none;padding:0;color:inherit;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.kbd{font:12px Consolas,monospace;border:1px solid currentColor;border-radius:5px;padding:0 5px;opacity:.6}
+
+/* ---------- live display ---------- */
+.display{position:relative;border-radius:22px;padding:18px 22px 20px;color:#fff;background:radial-gradient(120% 150% at 0% 0%,#7b1e2b 0%,#4d1018 55%,#2c070d 100%);box-shadow:0 12px 32px rgba(58,11,18,.22);outline:3px solid transparent;outline-offset:-3px;transition:outline-color .2s}
+.d-top{display:flex;align-items:center;gap:10px;font-size:13px;color:#e6c9cd}
+.d-info{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip{font-size:11.5px;font-weight:800;letter-spacing:.9px;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.1);color:#e6c9cd;white-space:nowrap}
+.chip.stable{background:rgba(95,211,141,.18);color:#8ae8b0}
+.chip.moving{background:rgba(242,184,75,.2);color:#ffd27d}
+.chip.over{background:rgba(255,107,107,.22);color:#ffa3a3}
+.icon-btn{border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none}
+.icon-btn:hover{background:rgba(255,255,255,.14)}
+.d-main{display:flex;align-items:baseline;justify-content:flex-end;gap:12px;padding:12px 0 6px;min-height:124px}
+#netVal{font-size:clamp(64px,12vw,140px);font-weight:700;line-height:1;letter-spacing:-2px;font-variant-numeric:tabular-nums;color:var(--cream)}
+#unitVal{font-size:clamp(24px,4vw,40px);font-weight:600;color:var(--gold)}
+.display.stale #netVal{opacity:.4}
+.d-sub{display:flex;gap:22px;flex-wrap:wrap;font-size:14px;color:#e6c9cd}
+.d-sub b{color:#fff;font-weight:600}
+.d-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.d-actions .btn-cream{margin-left:auto;min-width:160px}
+.d-connect{margin-top:20px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.d-links{width:100%;font-size:13px;color:#e6c9cd;margin-top:2px}
+.display.chk-ok{outline-color:#5fd38d}
+.display.chk-under{outline-color:#f2b84b}
+.display.chk-over{outline-color:#ff6b6b}
+.chk{display:none;margin-top:16px}
+.chk.on{display:block}
+.chk-row{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:8px;color:#e6c9cd}
+.chk-state{font-weight:800;letter-spacing:.5px}
+.bar{height:10px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden}
+.bar>i{display:block;height:100%;width:0;border-radius:99px;background:#f2b84b;transition:width .25s}
+.bar.ok>i{background:#5fd38d}
+.bar.over>i{background:#ff6b6b}
+.demo{margin-top:16px;padding-top:14px;border-top:1px dashed rgba(255,255,255,.2);display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:13px;color:#e6c9cd}
+.display:fullscreen{display:flex;flex-direction:column;justify-content:center;border-radius:0;padding:40px}
+.display:fullscreen #netVal{font-size:22vw}
+.display:fullscreen .d-main{justify-content:center}
+
+/* ---------- forms ---------- */
+.field{display:grid;gap:6px;margin-bottom:14px;min-width:0}
+.field label{font-size:13px;color:var(--muted);font-weight:600}
+.inp{width:100%;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;background:#fff;min-width:0}
+.inp:focus{outline:3px solid var(--m-100);border-color:var(--m)}
+select.inp{padding-right:8px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>.field{flex:1;min-width:120px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:4px 0 14px}
+.toggle-row b{display:block;font-weight:600}
+.toggle-row span{font-size:13px;color:var(--muted)}
+input.switch{appearance:none;-webkit-appearance:none;width:44px;height:26px;border-radius:99px;background:var(--line2);position:relative;cursor:pointer;flex:none;transition:background .15s;margin:0}
+input.switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .15s}
+input.switch:checked{background:var(--m)}
+input.switch:checked::after{left:21px}
+textarea.inp{min-height:130px;font:13px Consolas,"Cascadia Mono",monospace}
+
+/* ---------- lists & tables ---------- */
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700;background:var(--m-50);position:sticky;top:0;z-index:1}
+td.r,th.r{text-align:right}
+td.num,td.r{white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tfoot td{border-top:1px solid var(--line2);border-bottom:0;background:#fffafa}
+.tablewrap{border:1px solid var(--line);border-radius:12px;overflow:auto;max-height:540px}
+.empty{padding:30px 16px;text-align:center;color:var(--muted)}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;background:var(--m-50);color:var(--muted);text-transform:capitalize}
+.tag.ok{background:var(--ok-bg);color:var(--ok)}
+.tag.warn{background:var(--warn-bg);color:var(--warn)}
+.tag.bad{background:var(--bad-bg);color:var(--bad)}
+.recent{list-style:none;margin:0;padding:0}
+.recent li{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.recent li:last-child{border-bottom:0}
+.recent .t{font-size:12.5px;color:var(--muted);min-width:62px;font-variant-numeric:tabular-nums}
+.recent .l{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent .w{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.recent .empty{padding:22px 0}
+
+/* ---------- formula ---------- */
+.ftable td{padding:6px 8px}
+.ftable .inp{padding:8px 10px}
+.ftable td.idx,.ftable th.idx{color:var(--muted);width:40px;text-align:center}
+.ftable .amtcol{width:130px}
+.ftable .tcol{width:110px}
+.f-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
+.warnline{margin:10px 0 0;font-size:13px;color:var(--warn)}
+.step-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.step-count{font-size:13px;color:var(--muted);font-weight:600}
+.step-name{font-size:26px;font-weight:800;color:var(--m-900);line-height:1.2}
+.step-big{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:16px 0 12px}
+.step-big .added{font-size:clamp(54px,9vw,92px);font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.step-big .of{font-size:22px;color:var(--muted);font-weight:600}
+.step .bar{height:16px;background:var(--m-100)}
+.step .bar>i{background:#e0a030}
+.step .bar.ok>i{background:var(--ok)}
+.step .bar.over>i{background:var(--bad)}
+.step-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}
+.step-state{font-size:18px;font-weight:700}
+.step-state.under{color:var(--warn)}
+.step-state.ok{color:var(--ok)}
+.step-state.over{color:var(--bad)}
+.steps-list tr.cur td{background:var(--m-50);font-weight:700}
+
+/* ---------- settings ---------- */
+pre#raw{background:#2a0a10;color:#f3e3e5;border-radius:12px;padding:12px 14px;height:280px;overflow:auto;font:12.5px/1.55 Consolas,"Cascadia Mono",monospace;margin:0;white-space:pre-wrap;word-break:break-all}
+pre#raw .ok{color:#8ae8b0}
+pre#raw .bad{color:#ffa3a3}
+pre#raw .ts{color:#a9878c}
+details{border:1px solid var(--line);border-radius:12px;padding:0 16px;margin-bottom:10px;background:#fff}
+details[open]{padding-bottom:12px}
+summary{cursor:pointer;padding:14px 0;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font-size:22px;line-height:1;color:var(--m);font-weight:400}
+details[open] summary::after{content:"−"}
+details ol{margin:0;padding-left:20px}
+details li{margin-bottom:8px}
+details p{margin:0 0 8px}
+
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(16px);background:var(--m-900);color:#fff;padding:11px 18px;border-radius:12px;font-weight:600;opacity:0;transition:.2s;pointer-events:none;z-index:40;box-shadow:0 10px 30px rgba(0,0,0,.25);max-width:calc(100% - 32px);text-align:center}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ---------- small screens ---------- */
+@media (max-width:860px){.grid2{grid-template-columns:1fr}}
+@media (max-width:760px){
+  .tabs{position:fixed;left:0;right:0;bottom:0;margin:0;width:auto;border-radius:0;border:0;border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:30;box-shadow:0 -4px 18px rgba(58,11,18,.07)}
+  .tab{flex-direction:column;gap:3px;font-size:11.5px;padding:7px 4px}
+  .tab svg{width:22px;height:22px}
+  .tab[aria-selected="true"]{background:var(--m-50);color:var(--m)}
+  body{padding-bottom:calc(78px + env(safe-area-inset-bottom))}
+  #toast{bottom:calc(92px + env(safe-area-inset-bottom))}
+}
+@media (max-width:600px){
+  .topbar{padding-left:14px;padding-right:14px;gap:8px}
+  .brand{font-size:16px}
+  .status{padding:0 11px}
+  main{padding:12px 12px 28px}
+  .display{padding:14px 16px 16px;border-radius:18px}
+  .d-main{min-height:96px}
+  .d-actions .btn{flex:1}
+  .d-actions .btn-cream{flex-basis:100%;margin-left:0;order:-1;padding:14px}
+  .d-connect .btn{flex:1}
+  .card{padding:16px}
+  .hide-sm{display:none!important}
+  .ftable td.idx,.ftable th.idx{display:none}
+  .ftable .amtcol{width:88px}
+  .ftable .tcol{width:74px}
+  .ftable td{padding:6px 4px}
+  #sConfirm{width:100%}
+  th,td{padding:9px 8px}
+  .steps-list .c-idx{display:none}
+  .step-name{font-size:22px}
+}
+@media (max-width:420px){ .brand-name{display:none} }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff5e8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="10" width="18" height="10" rx="2.5"/><path d="M6 6h12"/><path d="M12 6v4"/><path d="M7 15h4"/></svg></span>
+    <span class="brand-name">Weighing Station</span>
+  </div>
+  <div class="top-right">
+    <span class="status" id="pill"><span class="dot"></span><span id="pillText">Not connected</span><span class="mini num" id="miniWeight"></span></span>
+    <button class="btn btn-top when-off" data-act="serial" id="btnConnectTop">Connect</button>
+    <button class="btn btn-top-ghost when-on" data-act="disconnect" id="btnDisconnect">Disconnect</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" data-tab="weigh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="10" width="18" height="10" rx="2.5"/><path d="M6 6h12"/><path d="M12 6v4"/><path d="M7 15h4"/></svg><span>Weigh</span></button>
+  <button class="tab" role="tab" data-tab="formula"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6"/><path d="M10 3v6L4.6 18.4A1.8 1.8 0 0 0 6.2 21h11.6a1.8 1.8 0 0 0 1.6-2.6L14 9V3"/><path d="M7.5 15h9"/></svg><span>Formula</span></button>
+  <button class="tab" role="tab" data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01"/></svg><span>Log</span></button>
+  <button class="tab" role="tab" data-tab="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></svg><span>Settings</span></button>
+</nav>
+
+<main>
+  <div class="banner hidden" id="supportBanner"></div>
+
+  <!-- ================= WEIGH ================= -->
+  <section class="panel" id="panel-weigh">
+    <div class="display stale" id="lcd" aria-live="polite">
+      <div class="d-top">
+        <span class="chip" id="stableBadge">NO DATA</span>
+        <span class="d-info" id="lcdInfo">Not connected</span>
+        <button class="icon-btn" id="btnFs" title="Full screen" aria-label="Full screen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+      </div>
+      <div class="d-main"><span id="netVal">– – –</span><span id="unitVal">g</span></div>
+      <div class="d-sub num">
+        <span>Gross <b id="grossVal">—</b></span>
+        <span>Tare <b id="tareVal">0.00 g</b></span>
+        <span class="hide-sm">Updated <b id="ageVal">—</b></span>
+      </div>
+      <div class="chk" id="chk">
+        <div class="chk-row num"><span class="chk-state" id="chkState">—</span><span id="chkText"></span></div>
+        <div class="bar" id="chkBar"><i></i></div>
+      </div>
+      <div class="d-actions when-on">
+        <button class="btn btn-glass" id="btnTare">Tare <span class="kbd hide-sm">T</span></button>
+        <button class="btn btn-glass" id="btnClearTare">Clear tare</button>
+        <button class="btn btn-cream" id="btnRecord">Record weight <span class="kbd hide-sm">Space</span></button>
+      </div>
+      <div class="d-connect when-off">
+        <button class="btn btn-cream btn-lg" data-act="serial" id="btnSerial">Connect scale</button>
+        <button class="btn btn-glass btn-lg when-port" data-act="reconnect" id="btnReconnect">Reconnect last scale</button>
+        <div class="d-links">Other options: <button class="link" data-act="ble" id="btnBle">Bluetooth LE scale</button> · <button class="link" data-act="demo" id="btnDemo">Try demo</button></div>
+      </div>
+      <div class="demo when-demo" id="demoBar">
+        <span>Demo:</span>
+        <button class="btn btn-glass btn-sm" data-demo="35.62">Place jar</button>
+        <button class="btn btn-glass btn-sm" data-demo="+10">+10 g</button>
+        <button class="btn btn-glass btn-sm" data-demo="+1">+1 g</button>
+        <button class="btn btn-glass btn-sm" data-demo="+0.1">+0.1 g</button>
+        <button class="btn btn-glass btn-sm" data-demo="+0.01">+0.01 g</button>
+        <button class="btn btn-glass btn-sm" data-demo="-1">−1 g</button>
+        <button class="btn btn-glass btn-sm" data-demo="0">Empty</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <h2>Record options</h2>
+        <div class="field"><label for="label">Label or product</label><input class="inp" id="label" placeholder="e.g. Lavender oil 100 g" autocomplete="off"></div>
+        <div class="row">
+          <div class="field"><label for="target">Target weight (g)</label><input class="inp num" id="target" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Off"></div>
+          <div class="field"><label for="tol">± Tolerance (g)</label><input class="inp num" id="tol" type="number" inputmode="decimal" step="0.01" min="0"></div>
+        </div>
+        <div class="toggle-row">
+          <div><b>Auto-record</b><span>Saves once each time the weight settles</span></div>
+          <input type="checkbox" class="switch" id="autoRec" aria-label="Auto-record">
+        </div>
+        <div class="field" style="margin-bottom:0"><label for="autoMin">Auto-record only above (g)</label><input class="inp num" id="autoMin" type="number" inputmode="decimal" step="0.01" min="0"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Recent</h2><button class="btn btn-sm" data-goto="log">View all</button></div>
+        <ul class="recent" id="recentList"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FORMULA ================= -->
+  <section class="panel" id="panel-formula">
+    <div class="card" id="fEdit">
+      <div class="card-head">
+        <h2>Formula</h2>
+        <div class="btn-row">
+          <select class="inp" id="fSaved" style="width:auto;min-width:170px" aria-label="Saved formulas"><option value="">Open saved…</option></select>
+          <button class="btn btn-sm" id="fSave">Save</button>
+          <button class="btn btn-sm btn-danger" id="fDelete">Delete</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field" style="flex:2;min-width:200px"><label for="fName">Formula name</label><input class="inp" id="fName" placeholder="e.g. Rose blend" autocomplete="off"></div>
+        <div class="field"><label for="fMode">Amounts in</label>
+          <select class="inp" id="fMode"><option value="%">Percent (%)</option><option value="g">Grams</option><option value="parts">Parts</option></select></div>
+        <div class="field"><label for="fBatch">Batch size (g)</label><input class="inp num" id="fBatch" type="number" inputmode="decimal" step="0.01" min="0"></div>
+        <div class="field"><label for="fTol">± Tolerance (g)</label><input class="inp num" id="fTol" type="number" inputmode="decimal" step="0.01" min="0"></div>
+      </div>
+      <div class="tablewrap" style="max-height:none">
+        <table class="ftable">
+          <thead><tr><th class="idx">#</th><th>Ingredient</th><th class="r" id="fAmtHead">Amount (%)</th><th class="r">To weigh (g)</th><th></th></tr></thead>
+          <tbody id="fBody"></tbody>
+          <tfoot><tr><td class="idx"></td><td class="muted">Total</td><td class="r num" id="fSum">0</td><td class="r num" id="fSumT">0</td><td></td></tr></tfoot>
+        </table>
+      </div>
+      <p class="warnline hidden" id="fWarn"></p>
+      <div class="f-actions">
+        <div class="btn-row">
+          <button class="btn btn-sm" id="fAdd">+ Add ingredient</button>
+          <button class="btn btn-sm" id="fPasteBtn">Paste from Excel</button>
+          <button class="btn btn-sm btn-danger" id="fClear">Clear</button>
+        </div>
+        <button class="btn btn-primary btn-lg" id="fStart">Start weighing</button>
+      </div>
+      <div class="hidden" id="fPaste" style="margin-top:16px">
+        <div class="field"><label for="fPasteTxt">One ingredient per line: name, then amount. Copy two columns from Excel and paste here.</label>
+          <textarea class="inp" id="fPasteTxt" placeholder="Bergamot oil	12.5&#10;Lavender oil	30&#10;Sandalwood	7.5"></textarea></div>
+        <div class="btn-row"><button class="btn btn-sm btn-primary" id="fPasteReplace">Replace list</button><button class="btn btn-sm" id="fPasteAppend">Add to list</button><button class="btn btn-sm btn-ghost" id="fPasteCancel">Cancel</button></div>
+      </div>
+      <p class="hint" style="margin-top:14px">Put the empty container on the scale, then press <b>Start weighing</b>. The app zeroes it for you, so don't press TARE on the scale during a batch.</p>
+    </div>
+
+    <div class="card step hidden" id="fRun">
+      <div class="step-head">
+        <div><div class="step-count" id="sCount">Step 1 of 1</div><div class="step-name" id="sName">—</div></div>
+        <div class="btn-row">
+          <button class="btn btn-sm" id="sRezero" title="Use the current reading as zero for this ingredient">Re-zero</button>
+          <button class="btn btn-sm" id="sBack">Back</button>
+          <button class="btn btn-sm" id="sSkip">Skip</button>
+          <button class="btn btn-sm btn-danger" id="sStop">Finish early</button>
+        </div>
+      </div>
+      <div class="step-big"><span class="added" id="sAdded">0.00</span><span class="of num" id="sOf">/ 0.00 g</span></div>
+      <div class="bar" id="sBar"><i></i></div>
+      <div class="step-foot">
+        <span class="step-state under" id="sState">Add ingredient</span>
+        <span class="muted num" id="sNext"></span>
+      </div>
+      <div class="step-foot" style="justify-content:flex-end">
+        <button class="btn btn-ok btn-lg" id="sConfirm">Confirm &amp; next <span class="kbd hide-sm">Enter</span></button>
+      </div>
+      <div class="tablewrap" style="margin-top:18px;max-height:360px">
+        <table class="steps-list"><thead><tr><th class="c-idx">#</th><th>Ingredient</th><th class="r">Target</th><th class="r">Weighed</th><th class="r hide-sm">Diff</th><th>Status</th></tr></thead><tbody id="sBody"></tbody></table>
+      </div>
+    </div>
+
+    <div class="card hidden" id="fDone">
+      <div class="card-head">
+        <h2 id="dTitle">Batch report</h2>
+        <div class="btn-row">
+          <button class="btn btn-sm" id="dCopy">Copy for Excel</button>
+          <button class="btn btn-sm" id="dCsv">Download CSV</button>
+          <button class="btn btn-sm" id="dLog">Add to log</button>
+        </div>
+      </div>
+      <div class="tablewrap" style="max-height:none"><table>
+        <thead><tr><th>#</th><th>Ingredient</th><th class="r">Target</th><th class="r">Weighed</th><th class="r">Diff</th><th class="r hide-sm">Formula %</th><th class="r hide-sm">Actual %</th><th>Status</th></tr></thead>
+        <tbody id="dBody"></tbody><tfoot id="dFoot"></tfoot>
+      </table></div>
+      <div class="f-actions" style="justify-content:flex-end">
+        <button class="btn" id="dEdit">Edit formula</button>
+        <button class="btn btn-primary" id="dAgain">Weigh another batch</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LOG ================= -->
+  <section class="panel" id="panel-log">
+    <div class="card">
+      <div class="card-head">
+        <h2>Weighing log <span class="count" id="logCount"></span></h2>
+        <div class="btn-row">
+          <button class="btn btn-sm" id="logCopy">Copy for Excel</button>
+          <button class="btn btn-sm" id="logCsv">Download CSV</button>
+          <button class="btn btn-sm btn-danger" id="logClear">Clear</button>
+        </div>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th class="hide-sm">#</th><th>Time</th><th>Label</th><th class="r">Net weight</th><th class="hide-sm">Status</th><th></th></tr></thead>
+        <tbody id="logBody"></tbody>
+      </table></div>
+      <p class="hint" style="margin-top:12px">Records are saved in this browser on this device only. Download a CSV to keep them safe.</p>
+    </div>
+  </section>
+
+  <!-- ================= SETTINGS ================= -->
+  <section class="panel" id="panel-settings">
+    <div class="grid2">
+      <div class="card">
+        <h2>Scale connection</h2>
+        <div class="btn-row">
+          <button class="btn btn-primary when-off" data-act="serial">Connect scale</button>
+          <button class="btn when-off when-port" data-act="reconnect">Reconnect</button>
+          <button class="btn when-off" data-act="ble">Bluetooth LE</button>
+          <button class="btn when-off" data-act="demo">Demo</button>
+          <button class="btn when-on" data-act="disconnect">Disconnect</button>
+        </div>
+        <h3>Ask the scale for the weight</h3>
+        <div class="field"><label for="pollPreset">How the scale sends its weight</label>
+          <select class="inp" id="pollPreset">
+            <option value="">By itself, continuously</option>
+            <option value="Q\r\n">A&amp;D — send "Q"</option>
+            <option value="SI\r\n">Mettler Toledo — send "SI"</option>
+            <option value="IP\r\n">Ohaus — send "IP"</option>
+            <option value="\x1bP\r\n">Sartorius — send "Esc P"</option>
+            <option value="P\r\n">Generic — send "P"</option>
+            <option value="custom">Custom command…</option>
+          </select></div>
+        <div class="row">
+          <div class="field hidden" id="pollCustomWrap" style="flex:2"><label for="pollCustom">Custom command</label><input class="inp" id="pollCustom" placeholder="e.g. W  (\r \n \e \xHH allowed)" autocomplete="off"></div>
+          <div class="field" id="pollMsWrap"><label for="pollMs">Every (ms)</label><input class="inp num" id="pollMs" type="number" inputmode="numeric" step="100" min="200"></div>
+        </div>
+        <div class="btn-row" id="pollTestRow"><button class="btn btn-sm" id="pollTest">Send once now</button><span class="muted" id="pollInfo" style="font-size:13px"></span></div>
+        <p class="hint">Only needed if the scale sends nothing until you press PRINT.</p>
+        <h3>Advanced</h3>
+        <div class="field" style="margin-bottom:0"><label for="baud">Baud rate</label>
+          <select class="inp" id="baud"><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>
+        <p class="hint">Bluetooth connections ignore this. It matters only for a USB-to-serial cable, where it must match the scale.</p>
+      </div>
+
+      <div class="card">
+        <h2>Stability &amp; sound</h2>
+        <div class="row">
+          <div class="field"><label for="stableTol">Max change (g)</label><input class="inp num" id="stableTol" type="number" inputmode="decimal" step="0.01" min="0"></div>
+          <div class="field"><label for="stableN">Over readings</label><input class="inp num" id="stableN" type="number" inputmode="numeric" step="1" min="2" max="10"></div>
+        </div>
+        <p class="hint" style="margin:-6px 0 14px">If the scale reports stable/unstable itself, the app uses that instead.</p>
+        <div class="toggle-row">
+          <div><b>Beep</b><span>On record and when a target is reached</span></div>
+          <input type="checkbox" class="switch" id="beep" aria-label="Beep">
+        </div>
+        <h3>App</h3>
+        <div class="btn-row"><button class="btn btn-primary hidden" id="btnInstall">Install app</button><span class="muted" id="installNote" style="font-size:13px"></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Live data from the scale <span class="count" id="rawStats"></span></h2>
+        <div class="btn-row">
+          <button class="btn btn-sm" id="rawPause">Pause</button>
+          <button class="btn btn-sm" id="rawCopy">Copy</button>
+          <button class="btn btn-sm" id="rawClear">Clear</button>
+        </div>
+      </div>
+      <pre id="raw">Nothing received yet.</pre>
+      <p class="hint" style="margin-top:10px">Shows exactly what the scale sends and the weight the app reads from it.</p>
+    </div>
+
+    <div class="card">
+      <h2>Help</h2>
+      <details>
+        <summary>Connect on a Windows PC</summary>
+        <ol>
+          <li>Disconnect the scale from any phone app. It can only connect to one device at a time.</li>
+          <li>In Windows, open <b>Settings → Bluetooth &amp; devices → Add device → Bluetooth</b> and pick the scale or adapter. The PIN is usually <b>1234</b> or <b>0000</b>.</li>
+          <li>Open <b>More Bluetooth settings → COM Ports</b> and note the <b>Outgoing</b> port, for example COM6.</li>
+          <li>In Chrome or Edge, press <b>Connect scale</b> and choose <i>Standard Serial over Bluetooth link (COM6)</i>.</li>
+          <li>Next time, press <b>Reconnect last scale</b>.</li>
+        </ol>
+      </details>
+      <details>
+        <summary>Connect on an Android phone</summary>
+        <ol>
+          <li>Close any Bluetooth serial app that is connected to the scale.</li>
+          <li>In Android <b>Settings → Bluetooth</b>, pair the scale or adapter. The PIN is usually <b>1234</b>.</li>
+          <li>Open this website in <b>Chrome</b> (keep Chrome updated) and tap <b>Connect scale</b>. Pick the scale and tap <b>Connect</b>.</li>
+          <li>iPhone isn't supported, because Safari and other iPhone browsers can't use Bluetooth serial.</li>
+        </ol>
+      </details>
+      <details>
+        <summary>Older scale with an RS-232 Bluetooth adapter</summary>
+        <ol>
+          <li>Set the scale's RS-232 output to <b>9600 baud</b> and <b>continuous</b> output in its menu.</li>
+          <li>Switch the adapter to <b>OFF</b>, plug it into the scale's 9-pin port and power it with the USB cable.</li>
+          <li>Slide the switch to <b>SLAVE</b> and press <b>CLEAR</b> once. Pair it as <b>BOLUTEK</b> or <b>BC04-B</b> with PIN <b>1234</b>.</li>
+          <li>Connect as above. If nothing arrives, press PRINT on the scale, choose a command under <b>Ask the scale for the weight</b>, or add a null-modem adapter between the scale and the adapter.</li>
+        </ol>
+      </details>
+      <details>
+        <summary>Install as an app</summary>
+        <p><b>Android:</b> in Chrome, tap <b>⋮ → Add to Home screen</b> (or <b>Install app</b>).</p>
+        <p><b>Windows:</b> in Chrome or Edge, click the install icon at the right end of the address bar.</p>
+        <p class="muted">Your log and formulas are stored on each device separately.</p>
+      </details>
+      <details>
+        <summary>Tips</summary>
+        <p>The scale's own TARE button zeroes the scale. The app's <b>Tare</b> only zeroes this screen, and <b>Clear tare</b> undoes it.</p>
+        <p>Keyboard: <b>Space</b> records a weight or confirms an ingredient, <b>Enter</b> confirms an ingredient, and <b>T</b> tares.</p>
+      </details>
+    </div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+<script>
+'use strict';
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num = (v, d=NaN) => { const n = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(n) ? n : d; };
+const roundTo = (v, d) => { const p = Math.pow(10, d); return Math.round(v * p) / p; };
+function fmt(v, d){
+  if (v == null || !isFinite(v)) return '—';
+  d = d ?? W.dec;
+  const s = Number(v).toFixed(d);
+  return /^-0\.?0*$/.test(s) ? s.slice(1) : s;
+}
+let toastT;
+function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2200); }
+
+/* ---------- settings ---------- */
+const S = Object.assign({ baud:'9600', stableTol:'0.02', stableN:'2', beep:true, target:'', tol:'0.50', autoRec:false, autoMin:'1', label:'', tab:'weigh', pollPreset:'', pollCustom:'', pollMs:'1000' }, store.get('lw.settings', {}));
+const saveS = () => store.set('lw.settings', S);
+
+/* ---------- weight state ---------- */
+const W = { gross:null, unit:'g', dec:2, stable:false, flag:false, overload:false, tare:0, last:0, times:[], recent:[], lines:0, bytes:0 };
+const net = () => W.gross == null ? null : roundTo(W.gross - W.tare, W.dec);
+let conn = null;   // {type:'serial'|'ble'|'demo', ...}
+
+/* ---------- parser ---------- */
+const UNITS = ['g','kg','mg','ct','oz','ozt','lb','lbs','dwt','gn','tl','tlh','tls','tlt','mom','pcs','pc','%'];
+function parseLine(line){
+  const s = String(line).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '').trim();
+  if (!s) return null;
+  const up = s.toUpperCase();
+  if (/OVERLOAD|(^|[^A-Z])(OL|O-L)([^A-Z]|$)/.test(up)) return { raw:s, overload:true, value:null, stable:null };
+  let stable = null;
+  if (/^S\s+S\s/.test(up)) stable = true;                                   // Mettler MT-SICS stable
+  else if (/^S\s+D\s/.test(up)) stable = false;                             // Mettler MT-SICS dynamic
+  else if (/\d\s*[A-Z]{0,4}\s*\?/.test(up)) stable = false;                  // Ohaus "?" = unstable
+  else if (/UNSTAB|MOTION|(^|[^A-Z])(US|UN|MO)([^A-Z]|$)/.test(up)) stable = false;
+  else if (/STAB|(^|[^A-Z])ST([^A-Z]|$)/.test(up)) stable = true;
+  const hasDot = s.includes('.');
+  const re = hasDot ? /([-+])?\s*(\d+(?:\.\d+)?)/g : /([-+])?\s*(\d+(?:,\d+)?)/g;
+  let best = null, last = null;
+  for (const m of s.matchAll(re)){ last = m; if (!best && /[.,]/.test(m[2])) best = m; }
+  const m = best || last;
+  if (!m) return { raw:s, value:null, stable };
+  const ns = m[2].replace(',', '.');
+  let value = parseFloat(ns);
+  if (m[1] === '-') value = -value;
+  // a minus sign further left, separated by other spacing, e.g. "-    0.05"
+  else if (!m[1] && /-\s*$/.test(s.slice(0, m.index))) value = -value;
+  const dec = ns.includes('.') ? ns.split('.')[1].length : 0;
+  const after = s.slice(m.index + m[0].length);
+  const um = after.match(/^\s*([a-zA-Z]{1,4}|%)(?![a-zA-Z])/);
+  let unit = null;
+  if (um && UNITS.includes(um[1].toLowerCase())) unit = um[1].toLowerCase();
+  return { raw:s, value, dec, unit, stable, overload:false };
+}
+window.parseLine = parseLine;
+
+/* 7-bit scales (7E1 / 7O1 / 7N2) read through an 8N1 adapter arrive with the parity/stop bit in bit 7.
+   Scale output is plain ASCII, so clearing bit 7 restores the text. */
+function strip8(u8){
+  for (let i = 0; i < u8.length; i++) if (u8[i] > 127) return u8.map(b => b & 0x7f);
+  return u8;
+}
+
+/* ---------- requesting the weight (scales that only send on request) ---------- */
+function unescapeCmd(s){
+  return String(s).replace(/\\x([0-9a-fA-F]{2})|\\r|\\n|\\e|\\t/g, m =>
+    m === '\\r' ? '\r' : m === '\\n' ? '\n' : m === '\\e' ? '\x1b' : m === '\\t' ? '\t' : String.fromCharCode(parseInt(m.slice(2), 16)));
+}
+function pollCommand(){
+  if (!S.pollPreset) return '';
+  if (S.pollPreset === 'custom'){
+    if (!S.pollCustom.trim()) return '';
+    const c = unescapeCmd(S.pollCustom.trim());
+    return /[\r\n]/.test(c) ? c : c + '\r\n';
+  }
+  return unescapeCmd(S.pollPreset);
+}
+async function sendToScale(str){
+  const c = conn;
+  if (!c || c.state !== 'open' || !str) return false;
+  const bytes = new TextEncoder().encode(str);
+  if (c.writing) return false;
+  c.writing = true;
+  try{
+    if (c.type === 'serial'){
+      if (!c.port.writable) return false;
+      const w = c.port.writable.getWriter();
+      try{ await w.write(bytes); } finally{ w.releaseLock(); }
+    } else if (c.type === 'ble'){
+      const ch = c.writeChar; if (!ch) return false;
+      if (ch.properties.writeWithoutResponse) await ch.writeValueWithoutResponse(bytes); else await ch.writeValue(bytes);
+    }
+    c.sent = (c.sent || 0) + 1;
+    return true;
+  }catch(e){ console.warn('write failed', e); return false; }
+  finally{ c.writing = false; }
+}
+let pollT = null;
+function updatePoll(){
+  clearInterval(pollT); pollT = null;
+  const cmd = pollCommand();
+  const info = $('#pollInfo');
+  if (conn && conn.state === 'open' && cmd && conn.type !== 'demo'){
+    const ms = Math.max(200, Math.round(num(S.pollMs, 1000)));
+    pollT = setInterval(() => sendToScale(cmd), ms);
+    sendToScale(cmd);
+    if (info) info.textContent = `Requesting every ${ms} ms`;
+  } else if (info) info.textContent = cmd ? 'Starts when the scale is connected' : '';
+}
+
+/* ---------- incoming data ---------- */
+let buf = '', flushT = null, sawNewline = false;
+function feed(text){
+  if (!text) return;
+  W.bytes += text.length;
+  buf += text;
+  if (/[\r\n]/.test(buf)){
+    sawNewline = true;
+    const parts = buf.split(/\r\n|\r|\n/);
+    buf = parts.pop();
+    for (const p of parts) handleLine(p);
+  }
+  if (buf.length > 160){ handleLine(buf); buf = ''; }
+  clearTimeout(flushT);
+  if (buf && !sawNewline) flushT = setTimeout(() => { if (buf){ const b = buf; buf = ''; handleLine(b); } }, 150);
+}
+function handleLine(line){
+  const r = parseLine(line);
+  if (r == null) return;
+  W.lines++;
+  pushRaw(r);
+  const now = performance.now();
+  if (r.overload){ W.overload = true; W.last = now; render(); return; }
+  if (r.value == null) return;
+  W.overload = false;
+  W.gross = r.value; W.dec = r.dec;
+  if (r.unit) W.unit = r.unit;
+  W.last = now;
+  W.times.push(now); while (W.times.length > 8) W.times.shift();
+  const n = Math.min(10, Math.max(2, Math.round(num(S.stableN, 2))));
+  W.recent.push(r.value); while (W.recent.length > n) W.recent.shift();
+  const calc = W.recent.length >= n && (Math.max(...W.recent) - Math.min(...W.recent)) <= num(S.stableTol, 0.02) + 1e-9;
+  W.flag = r.stable !== null;
+  W.stable = W.flag ? r.stable : calc;
+  render();
+  autoRecord();
+  formulaTick();
+}
+
+/* ---------- raw monitor ---------- */
+const RAW = []; let rawPaused = false;
+function pushRaw(r){
+  const t = new Date();
+  const ts = t.toLocaleTimeString([], {hour12:false}) + '.' + String(t.getMilliseconds()).padStart(3,'0');
+  let res;
+  if (r.overload) res = '<span class="bad">OVERLOAD</span>';
+  else if (r.value == null) res = '<span class="bad">no number</span>';
+  else res = '<span class="ok">' + esc(fmt(r.value, r.dec) + ' ' + (r.unit || W.unit)) + (r.stable === true ? ' · stable' : r.stable === false ? ' · moving' : '') + '</span>';
+  RAW.push(`<span class="ts">${ts}</span>  ${esc(JSON.stringify(r.raw))}  →  ${res}`);
+  while (RAW.length > 80) RAW.shift();
+  if (!rawPaused && S.tab === 'settings') renderRaw();
+}
+function renderRaw(){
+  const el = $('#raw');
+  el.innerHTML = RAW.length ? RAW.join('\n') : 'Nothing received yet.';
+  el.scrollTop = el.scrollHeight;
+  $('#rawStats').textContent = W.lines ? `· ${W.lines} lines, ${W.bytes} characters` : '';
+}
+
+/* ---------- display ---------- */
+function rate(){ const t = W.times; if (t.length < 2) return null; return (t.length - 1) / ((t[t.length-1] - t[0]) / 1000); }
+function render(){
+  const n = net(), lcd = $('#lcd');
+  const age = W.last ? (performance.now() - W.last) / 1000 : null;
+  const stale = !W.last || age > 3.5;
+  lcd.classList.toggle('stale', stale);
+  $('#netVal').textContent = W.overload ? 'OVER' : (n == null ? '– – –' : fmt(n));
+  $('#unitVal').textContent = W.overload ? '' : W.unit;
+  $('#grossVal').textContent = W.gross == null ? '—' : fmt(W.gross) + ' ' + W.unit;
+  $('#tareVal').textContent = fmt(W.tare) + ' ' + W.unit;
+  $('#ageVal').textContent = age == null ? '—' : (age < 1.5 ? 'just now' : Math.round(age) + ' s ago');
+  const b = $('#stableBadge');
+  if (W.overload){ b.textContent = 'OVERLOAD'; b.className = 'chip over'; }
+  else if (n == null || stale){ b.textContent = conn ? (W.last ? 'NO SIGNAL' : 'WAITING') : 'NO DATA'; b.className = 'chip'; }
+  else if (W.stable){ b.textContent = 'STABLE'; b.className = 'chip stable'; }
+  else { b.textContent = 'SETTLING'; b.className = 'chip moving'; }
+  // live weight in the top bar while on other tabs
+  $('#miniWeight').textContent = (conn && !stale && n != null && !W.overload && S.tab !== 'weigh') ? `${fmt(n)} ${W.unit}` : '';
+  // check-weigh
+  const tgt = num(S.target), tol = Math.abs(num(S.tol, 0));
+  const chk = $('#chk');
+  lcd.classList.remove('chk-ok', 'chk-over', 'chk-under');
+  if (tgt > 0){
+    chk.classList.add('on');
+    const bar = $('#chkBar');
+    if (n == null || W.overload){ $('#chkState').textContent = '—'; $('#chkText').textContent = `Target ${fmt(tgt)} ± ${fmt(tol)} ${W.unit}`; bar.firstElementChild.style.width = '0%'; }
+    else {
+      const d = roundTo(n - tgt, W.dec);
+      const st = d < -tol ? 'under' : d > tol ? 'over' : 'ok';
+      $('#chkState').textContent = st === 'ok' ? 'IN RANGE' : st === 'under' ? `UNDER by ${fmt(-d)} ${W.unit}` : `OVER by ${fmt(d)} ${W.unit}`;
+      $('#chkState').style.color = st === 'ok' ? '#8ae8b0' : st === 'over' ? '#ffa3a3' : '#ffd27d';
+      $('#chkText').textContent = `Target ${fmt(tgt)} ± ${fmt(tol)} ${W.unit}`;
+      bar.className = 'bar ' + st; bar.firstElementChild.style.width = Math.max(0, Math.min(100, n / tgt * 100)) + '%';
+      lcd.classList.add('chk-' + st);
+    }
+  } else chk.classList.remove('on');
+  renderPill();
+}
+function renderPill(){
+  const p = $('#pill'), t = $('#pillText');
+  p.className = 'status';
+  const info = $('#lcdInfo');
+  if (!conn){ t.textContent = 'Not connected'; info.textContent = W.last ? 'Disconnected · showing last reading' : 'Connect your scale to start'; return; }
+  if (conn.state === 'connecting'){ p.classList.add('warn'); t.textContent = 'Connecting…'; info.textContent = 'Connecting to the scale…'; return; }
+  const kind = conn.type === 'serial' ? 'Serial / Bluetooth' : conn.type === 'ble' ? 'Bluetooth LE' : 'Demo scale';
+  const age = W.last ? (performance.now() - W.last) / 1000 : (performance.now() - conn.since) / 1000;
+  if (age > 3.5){
+    p.classList.add(W.last ? 'bad' : 'warn');
+    t.textContent = W.last ? 'No signal' : 'Waiting for data';
+    info.textContent = W.last ? `No data for ${Math.round(age)} s · check the scale is on and in range` : 'Connected · waiting for the first reading…';
+    return;
+  }
+  p.classList.add('ok');
+  const r = rate();
+  t.textContent = 'Connected';
+  info.textContent = kind + (conn.name ? ` · ${conn.name}` : '') + (r ? ` · ${r < 10 ? r.toFixed(1) : Math.round(r)} readings/s` : '');
+}
+setInterval(() => { render(); }, 500);
+
+/* ---------- connection ---------- */
+function setConnUI(){
+  document.body.classList.toggle('is-on', !!conn);
+  document.body.classList.toggle('is-demo', !!(conn && conn.type === 'demo'));
+  refreshReconnect();
+  updatePoll();
+  render();
+}
+function resetReadings(){ W.recent = []; W.times = []; W.last = 0; W.gross = null; W.overload = false; buf = ''; sawNewline = false; }
+let wakeLock = null;
+async function keepAwake(on){
+  try{
+    if (on && 'wakeLock' in navigator && !wakeLock){ wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); }
+    else if (!on && wakeLock){ await wakeLock.release(); wakeLock = null; }
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && conn) keepAwake(true); });
+
+function serialHelp(e){
+  const m = (e && e.message) || String(e);
+  if (/No port selected|cancel/i.test(m)) return null;
+  if (/Failed to open|NetworkError|in use|busy|open/i.test(m)) return 'Could not connect. Check the scale is on and not connected to another device or app. On Windows, pick the Outgoing COM port.';
+  return 'Connection failed: ' + m;
+}
+async function connectSerial(port){
+  if (!('serial' in navigator)) return toast('This browser has no serial support. Use Chrome or Edge.');
+  try{
+    port = port || await navigator.serial.requestPort();
+  }catch(e){ const h = serialHelp(e); if (h) toast(h); return; }
+  if (conn) await disconnect();
+  resetReadings();
+  const c = conn = { type:'serial', port, state:'connecting', keep:true, since:performance.now(), name:'' };
+  try{ const i = port.getInfo ? port.getInfo() : {}; if (i.bluetoothServiceClassId) c.name = 'Bluetooth serial'; else if (i.usbVendorId) c.name = 'USB serial'; }catch(e){}
+  setConnUI();
+  try{
+    await port.open({ baudRate: parseInt(S.baud, 10) || 9600, dataBits:8, stopBits:1, parity:'none', bufferSize:4096 });
+  }catch(e){
+    if (conn === c){ conn = null; setConnUI(); }
+    toast(serialHelp(e) || 'Could not open the port.');
+    return;
+  }
+  c.state = 'open'; c.since = performance.now();
+  setConnUI(); keepAwake(true);
+  c.done = readLoop(c);
+}
+async function readLoop(c){
+  const dec = new TextDecoder();
+  while (c.port.readable && c.keep){
+    let reader;
+    try{ reader = c.port.readable.getReader(); }catch(e){ break; }
+    c.reader = reader;
+    try{
+      for (;;){
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value && value.length) feed(dec.decode(strip8(value), { stream:true }));
+      }
+    }catch(e){ console.warn('read error', e); }
+    finally{ try{ reader.releaseLock(); }catch(e){} }
+    if (!c.keep) break;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  try{ await c.port.close(); }catch(e){}
+  if (conn === c){
+    conn = null; setConnUI(); keepAwake(false);
+    toast('Scale disconnected');
+  }
+}
+const BLE_SERVICES = [
+  0xffe0, 0xfff0, 0xffb0, 0xffd0, 0xffe5, 0xfee7, 0x18f0, 0x181d, 0x1800, 0x180a,
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e',   // Nordic UART
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455',   // Microchip transparent UART
+  '0000fff0-0000-1000-8000-00805f9b34fb'
+];
+async function connectBle(){
+  if (!navigator.bluetooth) return toast('This browser has no Bluetooth LE support. Use Chrome or Edge.');
+  let device;
+  try{
+    device = await navigator.bluetooth.requestDevice({ acceptAllDevices:true, optionalServices:BLE_SERVICES });
+  }catch(e){ if (!/cancel|chosen/i.test(e.message)) toast('Bluetooth LE: ' + e.message); return; }
+  if (conn) await disconnect();
+  resetReadings();
+  const c = conn = { type:'ble', device, state:'connecting', since:performance.now(), name:device.name || '' , chars:[] };
+  setConnUI();
+  device.addEventListener('gattserverdisconnected', () => { if (conn === c){ conn = null; setConnUI(); keepAwake(false); toast('Scale disconnected'); } });
+  try{
+    const server = await device.gatt.connect();
+    let services = [];
+    try{ services = await server.getPrimaryServices(); }catch(e){}
+    for (const s of services){
+      let chars = [];
+      try{ chars = await s.getCharacteristics(); }catch(e){}
+      for (const ch of chars){
+        if (!(ch.properties.notify || ch.properties.indicate)) continue;
+        try{
+          const dec = new TextDecoder();
+          ch.addEventListener('characteristicvaluechanged', ev => { const dv = ev.target.value; feed(dec.decode(strip8(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)))); });
+          await ch.startNotifications();
+          c.chars.push(ch);
+        }catch(e){}
+      }
+    }
+    for (const s of services){
+      if (c.writeChar) break;
+      let chars = [];
+      try{ chars = await s.getCharacteristics(); }catch(e){}
+      c.writeChar = chars.find(ch => ch.properties.writeWithoutResponse || ch.properties.write) || null;
+    }
+    if (!c.chars.length) throw new Error('No data channel found on this device. If it pairs in Windows as a normal Bluetooth device, use "Connect scale" instead.');
+    c.state = 'open'; c.since = performance.now();
+    setConnUI(); keepAwake(true);
+  }catch(e){
+    try{ device.gatt.disconnect(); }catch(_){}
+    if (conn === c){ conn = null; setConnUI(); }
+    toast(e.message);
+  }
+}
+/* demo scale: sends a line like "ST,GS,+   35.62 g" once a second */
+const DEMO = { target:0, cur:0, phase:0 };
+function setDemo(t){ DEMO.target = Math.max(0, Math.round(t * 100) / 100); DEMO.phase = Math.abs(DEMO.target - DEMO.cur) > 0.3 ? 2 : 1; }
+function connectDemo(){
+  resetReadings();
+  DEMO.target = 0; DEMO.cur = 0; DEMO.phase = 0;
+  const c = conn = { type:'demo', state:'open', since:performance.now(), name:'simulated' };
+  c.timer = setInterval(() => {
+    // like a real scale: a big jump, then a small wobble, then stable
+    let moving = DEMO.phase > 0;
+    if (DEMO.phase === 2) DEMO.cur += (DEMO.target - DEMO.cur) * 0.85;
+    else if (DEMO.phase === 1) DEMO.cur = DEMO.target + (Math.random() < 0.5 ? -1 : 1) * (0.01 + Math.round(Math.random() * 2) / 100);
+    else DEMO.cur = DEMO.target;
+    if (DEMO.phase > 0) DEMO.phase--;
+    const v = Math.round(DEMO.cur * 100) / 100;
+    feed(`${moving ? 'US' : 'ST'},GS,${v < 0 ? '-' : '+'}${Math.abs(v).toFixed(2).padStart(8, ' ')} g\r\n`);
+  }, 1000);
+  setConnUI();
+}
+async function disconnect(){
+  const c = conn; if (!c) return;
+  conn = null;
+  if (c.type === 'serial'){
+    c.keep = false;
+    try{ if (c.reader) await c.reader.cancel(); }catch(e){}
+    try{ await c.done; }catch(e){}
+    try{ await c.port.close(); }catch(e){}
+  } else if (c.type === 'ble'){
+    try{ c.device.gatt.disconnect(); }catch(e){}
+  } else if (c.type === 'demo'){ clearInterval(c.timer); }
+  keepAwake(false);
+  setConnUI();
+}
+let lastPort = null;
+async function refreshReconnect(){
+  if (!('serial' in navigator)){ document.body.classList.remove('has-port'); return; }
+  try{
+    const ports = await navigator.serial.getPorts();
+    lastPort = ports.length ? ports[ports.length - 1] : null;
+  }catch(e){ lastPort = null; }
+  document.body.classList.toggle('has-port', !!lastPort);
+}
+
+/* ---------- tare & record ---------- */
+function tare(){ if (W.gross == null) return toast('No reading to tare yet'); W.tare = W.gross; render(); toast('Display zeroed'); }
+function clearTare(){ W.tare = 0; render(); }
+let LOG = store.get('lw.log', []);
+function record(src){
+  const n = net();
+  if (n == null || W.overload) return toast('No weight to record');
+  if (W.last && performance.now() - W.last > 3500) return toast('No live reading from the scale');
+  LOG.push({ t:Date.now(), label:S.label || '', w:n, unit:W.unit, stable:W.stable, src:src || 'manual' });
+  store.set('lw.log', LOG); renderLog();
+  beep(1046, .09);
+  toast(`Recorded ${fmt(n)} ${W.unit}` + (W.stable ? '' : ' (still settling)'));
+}
+let autoArmed = true;
+function autoRecord(){
+  if (!S.autoRec || RUN) return;
+  const n = net(); if (n == null || W.overload) return;
+  const min = num(S.autoMin, 1);
+  if (n < min){ autoArmed = true; return; }
+  if (autoArmed && W.stable){ autoArmed = false; record('auto'); }
+}
+function renderLog(){
+  const body = $('#logBody');
+  $('#logCount').textContent = LOG.length ? `· ${LOG.length}` : '';
+  renderRecent();
+  if (!LOG.length){ body.innerHTML = '<tr><td colspan="6" class="empty">No records yet. Press <b>Record weight</b> on the Weigh tab.</td></tr>'; return; }
+  body.innerHTML = LOG.map((r, i) => ({ r, i })).reverse().map(({ r, i }) => {
+    const d = new Date(r.t);
+    return `<tr><td class="muted hide-sm">${i + 1}</td><td class="num">${d.toLocaleDateString([], {day:'2-digit', month:'short'})} ${d.toLocaleTimeString([], {hour12:false, hour:'2-digit', minute:'2-digit'})}</td><td>${esc(r.label) || '<span class="muted">—</span>'}</td><td class="r num"><b>${esc(fmt(r.w, decOf(r.w)))}</b> ${esc(r.unit)}</td><td class="hide-sm">${r.stable ? '<span class="tag ok">stable</span>' : '<span class="tag warn">settling</span>'}${r.src === 'auto' ? ' <span class="tag">auto</span>' : r.src === 'formula' ? ' <span class="tag">formula</span>' : ''}</td><td class="r"><button class="btn btn-sm btn-ghost" data-del="${i}" title="Delete" aria-label="Delete">✕</button></td></tr>`;
+  }).join('');
+}
+function renderRecent(){
+  const ul = $('#recentList');
+  if (!LOG.length){ ul.innerHTML = '<li class="empty">No records yet. Put something on the scale and press <b>Record weight</b>.</li>'; return; }
+  ul.innerHTML = LOG.slice(-5).reverse().map(r => {
+    const d = new Date(r.t);
+    return `<li><span class="t">${d.toLocaleTimeString([], {hour12:false, hour:'2-digit', minute:'2-digit'})}</span><span class="l">${esc(r.label) || '<span class="muted">No label</span>'}</span><span class="w">${esc(fmt(r.w, decOf(r.w)))} ${esc(r.unit)}</span></li>`;
+  }).join('');
+}
+const decOf = v => { const s = String(v); return s.includes('.') ? Math.max(W.dec, s.split('.')[1].length) : W.dec; };
+function logRows(){
+  return [['No', 'Date', 'Time', 'Label', 'Net weight', 'Unit', 'Stable', 'Source']].concat(LOG.map((r, i) => {
+    const d = new Date(r.t);
+    return [i + 1, d.toLocaleDateString(), d.toLocaleTimeString([], {hour12:false}), r.label, r.w, r.unit, r.stable ? 'yes' : 'no', r.src];
+  }));
+}
+
+/* ---------- export helpers ---------- */
+const toTSV = rows => rows.map(r => r.map(c => String(c ?? '').replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\r\n');
+const toCSV = rows => rows.map(r => r.map(c => { const s = String(c ?? ''); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\r\n');
+async function copyText(text){
+  try{ await navigator.clipboard.writeText(text); toast('Copied — paste into Excel'); return; }catch(e){}
+  const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); toast('Copied — paste into Excel'); }catch(e){ toast('Copy failed'); }
+  ta.remove();
+}
+function download(name, text){
+  const blob = new Blob(['﻿' + text], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const stamp = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; };
+const safeName = s => (s || '').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').slice(0, 40);
+
+/* ---------- beep ---------- */
+let actx = null;
+function beep(f, d, n){
+  if (!S.beep) return;
+  try{
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    for (let k = 0; k < (n || 1); k++){
+      const t0 = actx.currentTime + k * (d + 0.07);
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+      o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + d + 0.03);
+    }
+  }catch(e){}
+}
+document.addEventListener('pointerdown', () => { try{ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); }catch(e){} }, { once:true });
+
+/* ---------- formula ---------- */
+let R = store.get('lw.recipe', null) || { name:'', mode:'%', batch:'100', tol:'0.05', items:[{ name:'', amt:'' }, { name:'', amt:'' }, { name:'', amt:'' }] };
+let RECIPES = store.get('lw.recipes', {});
+let RUN = store.get('lw.run', null);
+const saveR = () => store.set('lw.recipe', R);
+const saveRun = () => store.set('lw.run', RUN);
+function calcTargets(r){
+  const amts = r.items.map(it => Math.max(0, num(it.amt, 0)));
+  const sum = amts.reduce((a, b) => a + b, 0);
+  let batch = num(r.batch);
+  if (!(batch > 0)) batch = r.mode === 'g' ? sum : 0;
+  return { sum, batch, t:amts.map(a => sum > 0 ? a / sum * batch : 0) };
+}
+function renderFormulaEditor(){
+  $('#fName').value = R.name; $('#fMode').value = R.mode; $('#fBatch').value = R.batch; $('#fTol').value = R.tol;
+  $('#fBatch').placeholder = R.mode === 'g' ? 'as written' : 'required';
+  $('#fAmtHead').textContent = R.mode === '%' ? 'Amount (%)' : R.mode === 'g' ? 'Amount (g)' : 'Parts';
+  $('#fBody').innerHTML = R.items.map((it, i) => `<tr>
+    <td class="idx">${i + 1}</td>
+    <td><input class="inp" data-i="${i}" data-k="name" value="${esc(it.name)}" placeholder="Ingredient name"></td>
+    <td class="r amtcol"><input class="inp num" style="text-align:right" data-i="${i}" data-k="amt" value="${esc(it.amt)}" inputmode="decimal" placeholder="0"></td>
+    <td class="r num tcol" data-t="${i}"></td>
+    <td style="width:44px"><button class="btn btn-sm btn-ghost" data-rm="${i}" title="Remove" aria-label="Remove">✕</button></td></tr>`).join('');
+  updateTargets();
+  renderSaved();
+}
+function updateTargets(){
+  const { sum, batch, t } = calcTargets(R);
+  t.forEach((v, i) => { const td = document.querySelector(`[data-t="${i}"]`); if (td) td.textContent = v > 0 ? v.toFixed(2) : '—'; });
+  $('#fSum').textContent = (Math.round(sum * 1000) / 1000) + (R.mode === '%' ? ' %' : R.mode === 'g' ? ' g' : '');
+  $('#fSumT').textContent = batch > 0 && sum > 0 ? batch.toFixed(2) + ' g' : '—';
+  const w = $('#fWarn');
+  if (R.mode === '%' && sum > 0 && Math.abs(sum - 100) > 0.001){ w.textContent = `The percentages add up to ${Math.round(sum * 1000) / 1000}%, not 100%. The amounts are scaled so the batch still totals ${batch > 0 ? batch.toFixed(2) + ' g' : 'the batch size'}.`; w.classList.remove('hidden'); }
+  else if (R.mode !== 'g' && !(num(R.batch) > 0) && sum > 0){ w.textContent = 'Enter a batch size to see how much of each ingredient to weigh.'; w.classList.remove('hidden'); }
+  else w.classList.add('hidden');
+}
+function renderSaved(){
+  const names = Object.keys(RECIPES).sort((a, b) => a.localeCompare(b));
+  $('#fSaved').innerHTML = '<option value="">Open saved…</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+}
+function parsePaste(text){
+  const out = [];
+  for (const raw of text.split(/\r?\n/)){
+    const line = raw.trim(); if (!line) continue;
+    let m = line.match(/^(.*?)\s*[\t;]\s*([-+]?\d+(?:[.,]\d+)?)\s*(?:%|g)?\s*$/) || line.match(/^(.*?)\s*,\s*([-+]?\d+(?:\.\d+)?)\s*(?:%|g)?\s*$/) || line.match(/^(.*\S)\s+([-+]?\d+(?:[.,]\d+)?)\s*(?:%|g)?\s*$/);
+    if (m && m[1]) out.push({ name:m[1].replace(/^["']|["']$/g, '').trim(), amt:m[2].replace(',', '.') });
+    else if (m) out.push({ name:'', amt:m[2].replace(',', '.') });
+  }
+  return out;
+}
+function startBatch(){
+  const { batch, t } = calcTargets(R);
+  const items = R.items.map((it, i) => ({ name:it.name.trim() || `Ingredient ${i + 1}`, amt:num(it.amt, 0), target:roundTo(t[i], 3) })).filter(it => it.amt > 0);
+  if (!items.length) return toast('Add at least one ingredient with an amount');
+  if (!(batch > 0)) return toast('Enter a batch size');
+  RUN = { name:R.name.trim() || 'Batch', mode:R.mode, batch, tol:Math.abs(num(R.tol, 0.05)), items, actual:items.map(() => null), bases:items.map(() => null), i:0, base:W.gross, reached:false, started:Date.now(), done:false };
+  RUN.bases[0] = W.gross;
+  saveRun(); renderFormula();
+  if (W.gross == null) toast('Waiting for the scale — the first reading will be used as zero');
+  else toast('Container zeroed — add the first ingredient');
+}
+function added(){ if (!RUN || W.gross == null || RUN.base == null) return null; return roundTo(W.gross - RUN.base, W.dec); }
+function stepState(a, target, tol){ if (a == null) return 'under'; const d = a - target; return d < -tol - 1e-9 ? 'under' : d > tol + 1e-9 ? 'over' : 'ok'; }
+function formulaTick(){
+  if (!RUN || RUN.done) return;
+  if (RUN.base == null && W.gross != null){ RUN.base = RUN.bases[RUN.i] = W.gross; saveRun(); }
+  const it = RUN.items[RUN.i]; if (!it) return;
+  const a = added();
+  const st = stepState(a, it.target, RUN.tol);
+  if (st === 'ok' && !RUN.reached){ RUN.reached = true; beep(1318, .12, 2); }
+  if (st === 'over' && RUN.reached !== 'over'){ RUN.reached = 'over'; beep(330, .25); }
+  if (st === 'under' && RUN.reached) RUN.reached = false;
+  renderStep();
+}
+function renderFormula(){
+  const edit = $('#fEdit'), run = $('#fRun'), done = $('#fDone');
+  edit.classList.toggle('hidden', !!RUN);
+  run.classList.toggle('hidden', !RUN || RUN.done);
+  done.classList.toggle('hidden', !RUN || !RUN.done);
+  if (!RUN) renderFormulaEditor();
+  else if (RUN.done) renderReport();
+  else { renderStep(); renderStepList(); }
+}
+function renderStep(){
+  if (!RUN || RUN.done) return;
+  const it = RUN.items[RUN.i], a = added(), u = W.unit;
+  $('#sCount').textContent = `${RUN.name} · ingredient ${RUN.i + 1} of ${RUN.items.length}`;
+  $('#sName').textContent = it.name;
+  $('#sAdded').textContent = a == null ? '– – –' : fmt(a);
+  $('#sOf').textContent = `/ ${fmt(it.target)} ${u}`;
+  const st = stepState(a, it.target, RUN.tol);
+  const bar = $('#sBar'); bar.className = 'bar ' + (a == null ? '' : st);
+  bar.firstElementChild.style.width = (a == null ? 0 : Math.max(0, Math.min(100, a / it.target * 100))) + '%';
+  const s = $('#sState'); s.className = 'step-state ' + st;
+  if (a == null) s.textContent = 'Waiting for the scale…';
+  else if (st === 'under') s.textContent = `Add ${fmt(it.target - a)} ${u} more`;
+  else if (st === 'ok') s.textContent = `✓ In range (${a - it.target >= 0 ? '+' : ''}${fmt(a - it.target)} ${u})` + (W.stable ? '' : ' · settling');
+  else s.textContent = `Over by ${fmt(a - it.target)} ${u}`;
+  const nx = RUN.items[RUN.i + 1];
+  $('#sNext').textContent = nx ? `Next: ${nx.name} (${fmt(nx.target)} ${u})` : 'Last ingredient';
+  $('#sBack').disabled = RUN.i === 0;
+  $('#sConfirm').firstChild.textContent = RUN.i === RUN.items.length - 1 ? 'Confirm & finish ' : 'Confirm & next ';
+}
+function renderStepList(){
+  const u = W.unit;
+  $('#sBody').innerHTML = RUN.items.map((it, i) => {
+    const a = RUN.actual[i], cur = i === RUN.i;
+    let status = cur ? '<span class="tag">weighing</span>' : '';
+    let diff = '';
+    if (a === 'skip') status = '<span class="tag warn">skipped</span>';
+    else if (a != null){ const st = stepState(a, it.target, RUN.tol); status = `<span class="tag ${st === 'ok' ? 'ok' : st === 'over' ? 'bad' : 'warn'}">${st === 'ok' ? 'OK' : st}</span>`; diff = (a - it.target >= 0 ? '+' : '') + fmt(a - it.target); }
+    return `<tr class="${cur ? 'cur' : a != null ? 'done' : ''}"><td class="muted c-idx">${i + 1}</td><td>${esc(it.name)}</td><td class="r num">${fmt(it.target)} ${u}</td><td class="r num">${a != null && a !== 'skip' ? fmt(a) + ' ' + u : ''}</td><td class="r num hide-sm">${diff}</td><td>${status}</td></tr>`;
+  }).join('');
+}
+function confirmStep(){
+  if (!RUN || RUN.done) return;
+  const a = added();
+  if (a == null) return toast('No reading from the scale yet');
+  RUN.actual[RUN.i] = a;
+  beep(988, .08);
+  nextStep();
+}
+function nextStep(){
+  RUN.i++; RUN.base = W.gross; RUN.reached = false;
+  if (RUN.i >= RUN.items.length){ RUN.done = true; RUN.finished = Date.now(); RUN.i = RUN.items.length - 1; beep(1568, .15, 3); }
+  else RUN.bases[RUN.i] = W.gross;
+  saveRun(); renderFormula();
+}
+function backStep(){
+  if (!RUN || RUN.i === 0) return;
+  // reopen the previous ingredient: measure again from the weight the container had when that ingredient started
+  RUN.bases[RUN.i] = null;
+  RUN.i--;
+  const prev = RUN.actual[RUN.i];
+  let base = RUN.bases[RUN.i];
+  if (base == null && W.gross != null) base = roundTo(W.gross - (typeof prev === 'number' ? prev : 0), 4);
+  RUN.base = base;
+  RUN.actual[RUN.i] = null; RUN.reached = false;
+  saveRun(); renderFormula();
+  toast('Back to ' + RUN.items[RUN.i].name + ' — everything added since it started counts toward it');
+}
+function skipStep(){ if (!RUN) return; RUN.actual[RUN.i] = 'skip'; nextStep(); }
+function rezero(){ if (!RUN || W.gross == null) return; RUN.base = RUN.bases[RUN.i] = W.gross; RUN.reached = false; saveRun(); renderStep(); toast('Zeroed for this ingredient'); }
+function finishEarly(){
+  const b = $('#sStop');
+  if (b.dataset.armed !== '1'){ b.dataset.armed = '1'; b.textContent = 'Tap again to finish'; setTimeout(() => { b.dataset.armed = ''; b.textContent = 'Finish early'; }, 3000); return; }
+  b.dataset.armed = ''; b.textContent = 'Finish early';
+  RUN.done = true; RUN.finished = Date.now(); saveRun(); renderFormula();
+}
+function reportRows(){
+  const u = W.unit;
+  const totalT = RUN.items.reduce((s, it) => s + it.target, 0);
+  const totalA = RUN.actual.reduce((s, a) => s + (typeof a === 'number' ? a : 0), 0);
+  const rows = RUN.items.map((it, i) => {
+    const a = RUN.actual[i];
+    const has = typeof a === 'number';
+    return { i:i + 1, name:it.name, target:it.target, actual:has ? a : null, diff:has ? a - it.target : null,
+      fpct:totalT > 0 ? it.target / totalT * 100 : 0, apct:has && totalA > 0 ? a / totalA * 100 : null,
+      status:a === 'skip' ? 'skipped' : a == null ? 'not weighed' : (stepState(a, it.target, RUN.tol) === 'ok' ? 'OK' : stepState(a, it.target, RUN.tol)) };
+  });
+  return { rows, totalT, totalA, u };
+}
+function renderReport(){
+  const { rows, totalT, totalA, u } = reportRows();
+  const d = new Date(RUN.finished || Date.now());
+  $('#dTitle').textContent = `Batch report · ${RUN.name} · ${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour12:false, hour:'2-digit', minute:'2-digit'})}`;
+  $('#dBody').innerHTML = rows.map(r => `<tr><td class="muted">${r.i}</td><td>${esc(r.name)}</td><td class="r num">${fmt(r.target)} ${u}</td><td class="r num"><b>${r.actual == null ? '—' : fmt(r.actual) + ' ' + u}</b></td><td class="r num">${r.diff == null ? '' : (r.diff >= 0 ? '+' : '') + fmt(r.diff)}</td><td class="r num hide-sm">${r.fpct.toFixed(2)}%</td><td class="r num hide-sm">${r.apct == null ? '' : r.apct.toFixed(2) + '%'}</td><td><span class="tag ${r.status === 'OK' ? 'ok' : r.status === 'over' ? 'bad' : 'warn'}">${r.status}</span></td></tr>`).join('');
+  $('#dFoot').innerHTML = `<tr><td></td><td><b>Total</b></td><td class="r num"><b>${fmt(totalT)} ${u}</b></td><td class="r num"><b>${fmt(totalA)} ${u}</b></td><td class="r num">${(totalA - totalT >= 0 ? '+' : '') + fmt(totalA - totalT)}</td><td class="r num hide-sm">100%</td><td class="r num hide-sm">${totalA > 0 ? '100%' : ''}</td><td></td></tr>`;
+}
+function reportTable(){
+  const { rows, totalT, totalA, u } = reportRows();
+  const d = new Date(RUN.finished || Date.now());
+  const out = [[`Formula: ${RUN.name}`], [`Date: ${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour12:false})}`], [`Batch size: ${RUN.batch} ${u}`, `Tolerance: ±${RUN.tol} ${u}`], [],
+    ['No', 'Ingredient', `Target (${u})`, `Weighed (${u})`, `Diff (${u})`, 'Formula %', 'Actual %', 'Status']];
+  rows.forEach(r => out.push([r.i, r.name, fmt(r.target), r.actual == null ? '' : fmt(r.actual), r.diff == null ? '' : fmt(r.diff), r.fpct.toFixed(3), r.apct == null ? '' : r.apct.toFixed(3), r.status]));
+  out.push(['', 'Total', fmt(totalT), fmt(totalA), fmt(totalA - totalT), '100', totalA > 0 ? '100' : '', '']);
+  return out;
+}
+
+/* ---------- wiring ---------- */
+function selectTab(name){
+  S.tab = name; saveS();
+  $$('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
+  $$('.panel').forEach(p => p.classList.toggle('on', p.id === 'panel-' + name));
+  if (name === 'settings') renderRaw();
+  render();
+  window.scrollTo({ top:0 });
+}
+$$('.tab').forEach(t => t.addEventListener('click', () => selectTab(t.dataset.tab)));
+// every connect / disconnect button in the page uses data-act
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (b){
+    const a = b.dataset.act;
+    if (a === 'serial') connectSerial();
+    else if (a === 'reconnect'){ if (lastPort) connectSerial(lastPort); else connectSerial(); }
+    else if (a === 'ble') connectBle();
+    else if (a === 'demo'){ selectTab('weigh'); connectDemo(); }
+    else if (a === 'disconnect') disconnect();
+    return;
+  }
+  const g = e.target.closest('[data-goto]');
+  if (g) selectTab(g.dataset.goto);
+});
+$('#btnTare').addEventListener('click', tare);
+$('#btnClearTare').addEventListener('click', clearTare);
+$('#btnRecord').addEventListener('click', () => record('manual'));
+$('#btnFs').addEventListener('click', () => {
+  const el = $('#lcd');
+  try{ if (document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen().catch(() => toast('Full screen not available')); }catch(e){ toast('Full screen not available'); }
+});
+$('#demoBar').addEventListener('click', e => {
+  const b = e.target.closest('[data-demo]'); if (!b) return;
+  const v = b.dataset.demo;
+  setDemo(/^[+-]/.test(v) ? DEMO.target + parseFloat(v) : parseFloat(v));
+});
+// settings inputs
+function bindSetting(id, key, type){
+  const el = $('#' + id);
+  if (type === 'check') el.checked = !!S[key]; else el.value = S[key];
+  el.addEventListener(type === 'check' ? 'change' : 'input', () => { S[key] = type === 'check' ? el.checked : el.value; saveS(); render(); if (key === 'autoRec') autoArmed = true; });
+}
+bindSetting('label', 'label'); bindSetting('target', 'target'); bindSetting('tol', 'tol');
+bindSetting('autoRec', 'autoRec', 'check'); bindSetting('autoMin', 'autoMin');
+bindSetting('baud', 'baud'); bindSetting('stableTol', 'stableTol'); bindSetting('stableN', 'stableN'); bindSetting('beep', 'beep', 'check');
+bindSetting('pollPreset', 'pollPreset'); bindSetting('pollCustom', 'pollCustom'); bindSetting('pollMs', 'pollMs');
+function pollVis(){ $('#pollCustomWrap').classList.toggle('hidden', S.pollPreset !== 'custom'); $('#pollMsWrap').classList.toggle('hidden', !S.pollPreset); $('#pollTestRow').classList.toggle('hidden', !S.pollPreset); }
+function pollUI(){ pollVis(); updatePoll(); }
+['pollPreset', 'pollCustom', 'pollMs'].forEach(id => $('#' + id).addEventListener('input', pollUI));
+$('#pollTest').addEventListener('click', async () => {
+  const cmd = pollCommand();
+  if (!cmd) return toast('Choose a command first');
+  if (!conn || conn.state !== 'open') return toast('Connect the scale first');
+  if (conn.type === 'demo') return toast('The demo scale sends by itself');
+  toast(await sendToScale(cmd) ? 'Command sent — watch the data below' : 'Could not send to the scale');
+});
+// log
+$('#logBody').addEventListener('click', e => { const b = e.target.closest('[data-del]'); if (!b) return; LOG.splice(+b.dataset.del, 1); store.set('lw.log', LOG); renderLog(); });
+$('#logCopy').addEventListener('click', () => LOG.length ? copyText(toTSV(logRows())) : toast('Log is empty'));
+$('#logCsv').addEventListener('click', () => LOG.length ? download(`weighing-log_${stamp()}.csv`, toCSV(logRows())) : toast('Log is empty'));
+$('#logClear').addEventListener('click', e => {
+  const b = e.currentTarget;
+  if (!LOG.length) return;
+  if (b.dataset.armed !== '1'){ b.dataset.armed = '1'; b.textContent = 'Tap again to clear'; setTimeout(() => { b.dataset.armed = ''; b.textContent = 'Clear'; }, 3000); return; }
+  b.dataset.armed = ''; b.textContent = 'Clear'; LOG = []; store.set('lw.log', LOG); renderLog();
+});
+// raw
+$('#rawPause').addEventListener('click', e => { rawPaused = !rawPaused; e.currentTarget.textContent = rawPaused ? 'Resume' : 'Pause'; if (!rawPaused) renderRaw(); });
+$('#rawCopy').addEventListener('click', () => copyText($('#raw').innerText));
+$('#rawClear').addEventListener('click', () => { RAW.length = 0; renderRaw(); });
+// formula editor
+$('#fName').addEventListener('input', e => { R.name = e.target.value; saveR(); });
+$('#fMode').addEventListener('change', e => { R.mode = e.target.value; saveR(); renderFormulaEditor(); });
+$('#fBatch').addEventListener('input', e => { R.batch = e.target.value; saveR(); updateTargets(); });
+$('#fTol').addEventListener('input', e => { R.tol = e.target.value; saveR(); });
+$('#fBody').addEventListener('input', e => {
+  const el = e.target; if (!el.dataset.k) return;
+  R.items[+el.dataset.i][el.dataset.k] = el.value; saveR(); if (el.dataset.k === 'amt') updateTargets();
+});
+$('#fBody').addEventListener('keydown', e => {
+  const el = e.target; if (e.key !== 'Enter' || !el.dataset.k) return;
+  e.preventDefault();
+  const i = +el.dataset.i;
+  if (el.dataset.k === 'name'){ const nx = document.querySelector(`[data-i="${i}"][data-k="amt"]`); nx && nx.focus(); return; }
+  if (i === R.items.length - 1){ R.items.push({ name:'', amt:'' }); saveR(); renderFormulaEditor(); }
+  const nx = document.querySelector(`[data-i="${i + 1}"][data-k="name"]`); nx && nx.focus();
+});
+$('#fBody').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; R.items.splice(+b.dataset.rm, 1); if (!R.items.length) R.items.push({ name:'', amt:'' }); saveR(); renderFormulaEditor(); });
+$('#fAdd').addEventListener('click', () => { R.items.push({ name:'', amt:'' }); saveR(); renderFormulaEditor(); const el = document.querySelector(`[data-i="${R.items.length - 1}"][data-k="name"]`); el && el.focus(); });
+$('#fClear').addEventListener('click', e => {
+  const b = e.currentTarget;
+  if (b.dataset.armed !== '1'){ b.dataset.armed = '1'; b.textContent = 'Tap again to clear'; setTimeout(() => { b.dataset.armed = ''; b.textContent = 'Clear'; }, 3000); return; }
+  b.dataset.armed = ''; b.textContent = 'Clear';
+  R = { name:'', mode:R.mode, batch:R.batch, tol:R.tol, items:[{ name:'', amt:'' }, { name:'', amt:'' }, { name:'', amt:'' }] }; saveR(); renderFormulaEditor();
+});
+$('#fPasteBtn').addEventListener('click', () => { $('#fPaste').classList.remove('hidden'); $('#fPasteTxt').focus(); });
+$('#fPasteCancel').addEventListener('click', () => $('#fPaste').classList.add('hidden'));
+function applyPaste(replace){
+  const items = parsePaste($('#fPasteTxt').value);
+  if (!items.length) return toast('No "name + amount" lines found');
+  R.items = replace ? items : R.items.filter(it => it.name.trim() || String(it.amt).trim()).concat(items);
+  saveR(); renderFormulaEditor(); $('#fPaste').classList.add('hidden'); $('#fPasteTxt').value = '';
+  toast(`${items.length} ingredient${items.length > 1 ? 's' : ''} added`);
+}
+$('#fPasteReplace').addEventListener('click', () => applyPaste(true));
+$('#fPasteAppend').addEventListener('click', () => applyPaste(false));
+$('#fSave').addEventListener('click', () => {
+  const n = R.name.trim(); if (!n) { $('#fName').focus(); return toast('Give the formula a name first'); }
+  RECIPES[n] = JSON.parse(JSON.stringify(R)); store.set('lw.recipes', RECIPES); renderSaved(); $('#fSaved').value = n; toast(`Saved "${n}"`);
+});
+$('#fSaved').addEventListener('change', () => { const n = $('#fSaved').value; if (!n || !RECIPES[n]) return; R = JSON.parse(JSON.stringify(RECIPES[n])); saveR(); renderFormulaEditor(); $('#fSaved').value = n; toast(`Opened "${n}"`); });
+$('#fDelete').addEventListener('click', e => {
+  const n = $('#fSaved').value, b = e.currentTarget;
+  if (!n) return toast('Open a saved formula first');
+  if (b.dataset.armed !== '1'){ b.dataset.armed = '1'; b.textContent = 'Sure?'; setTimeout(() => { b.dataset.armed = ''; b.textContent = 'Delete'; }, 3000); return; }
+  b.dataset.armed = ''; b.textContent = 'Delete';
+  delete RECIPES[n]; store.set('lw.recipes', RECIPES); renderSaved(); toast(`Deleted "${n}"`);
+});
+$('#fStart').addEventListener('click', startBatch);
+// run
+$('#sConfirm').addEventListener('click', confirmStep);
+$('#sBack').addEventListener('click', backStep);
+$('#sSkip').addEventListener('click', skipStep);
+$('#sRezero').addEventListener('click', rezero);
+$('#sStop').addEventListener('click', finishEarly);
+// report
+$('#dCopy').addEventListener('click', () => copyText(toTSV(reportTable())));
+$('#dCsv').addEventListener('click', () => download(`batch_${safeName(RUN.name) || 'formula'}_${stamp()}.csv`, toCSV(reportTable())));
+$('#dLog').addEventListener('click', () => {
+  RUN.items.forEach((it, i) => { const a = RUN.actual[i]; if (typeof a === 'number') LOG.push({ t:RUN.finished || Date.now(), label:`${RUN.name} – ${it.name}`, w:a, unit:W.unit, stable:true, src:'formula' }); });
+  store.set('lw.log', LOG); renderLog(); toast('Added to weighing log');
+});
+$('#dEdit').addEventListener('click', () => { RUN = null; saveRun(); renderFormula(); });
+$('#dAgain').addEventListener('click', () => { RUN = null; saveRun(); startBatch(); });
+// keep buttons from holding focus so Space/Enter shortcuts stay predictable
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTimeout(() => b.blur(), 0); });
+document.addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (['input', 'textarea', 'select'].includes(tag) || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 't' || e.key === 'T'){ e.preventDefault(); tare(); return; }
+  const running = RUN && !RUN.done && S.tab === 'formula';
+  if (e.key === 'Enter' && running){ e.preventDefault(); confirmStep(); return; }
+  if (e.key === ' ' || e.code === 'Space'){
+    if (running){ e.preventDefault(); confirmStep(); }
+    else if (S.tab === 'weigh'){ e.preventDefault(); record('manual'); }
+  }
+});
+if ('serial' in navigator){
+  navigator.serial.addEventListener('connect', refreshReconnect);
+  navigator.serial.addEventListener('disconnect', refreshReconnect);
+}
+
+/* ---------- start ---------- */
+(function init(){
+  const sb = $('#supportBanner');
+  if (!('serial' in navigator) && !navigator.bluetooth){
+    sb.innerHTML = '<b>This browser can’t connect to scales.</b> Use <b>Google Chrome</b> on Android or a PC, or <b>Microsoft Edge</b> on a PC. iPhone isn’t supported. You can still try the demo.';
+    sb.classList.remove('hidden');
+  } else if (!('serial' in navigator)){
+    sb.innerHTML = 'This browser can only connect to Bluetooth LE scales. For Bluetooth serial scales and RS-232 adapters, update <b>Chrome</b> or use Chrome or Edge on a PC.';
+    sb.classList.remove('hidden');
+  }
+  if (window.self !== window.top){
+    sb.innerHTML = 'This page is shown inside another page, where browsers block Bluetooth. Open it directly in Chrome or Edge.';
+    sb.classList.remove('hidden');
+  }
+  if (RUN && !RUN.done) { RUN.base = RUN.base ?? null; }
+  if (S.tab === 'raw' || S.tab === 'help') S.tab = 'settings';
+  selectTab(['weigh', 'formula', 'log', 'settings'].includes(S.tab) ? S.tab : 'weigh');
+  if (RUN && !RUN.bases) RUN.bases = RUN.items.map(() => null);
+  pollVis();
+  renderLog(); renderFormula(); renderSaved(); setConnUI();
+  if (RUN && !RUN.done) toast('Unfinished batch restored — don\'t move the container');
+  setupInstall();
+})();
+
+/* ---------- installable app + offline ---------- */
+function setupInstall(){
+  const note = $('#installNote'), btn = $('#btnInstall');
+  const standalone = window.matchMedia && matchMedia('(display-mode: standalone)').matches;
+  note.textContent = standalone ? 'Running as an installed app.' : 'To install: open the browser menu and choose “Install app” or “Add to Home screen”.';
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault(); deferred = e;
+    btn.classList.remove('hidden'); note.textContent = 'Adds Weighing Station to your home screen or desktop.';
+  });
+  btn.addEventListener('click', async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    try{ await deferred.userChoice; }catch(e){}
+    deferred = null; btn.classList.add('hidden');
+  });
+  window.addEventListener('appinstalled', () => { btn.classList.add('hidden'); note.textContent = 'Installed.'; toast('App installed'); });
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+}
+</script>
+</body>
+</html>
